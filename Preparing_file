@@ -1,0 +1,122 @@
+# import json
+# import subprocess
+# from VaultFuncs import *
+
+# _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+#
+# async def members_info(self, request):  # Информация о членах организации
+#     org_id = await self.get_org_id(request)
+#     info = subprocess.check_output(f'bw list org-members'
+#                                    f' --organizationid {org_id}'
+#                                    f' --session {self.auth}', shell=True)
+#     dct_info = {}
+#     for item in json.loads(info):
+#         dct_info[item['name']] = (item['email'], item['id'])
+#     return dct_info
+
+# _____________________________________________________________________________________________________________________
+
+# async def delete_member(self, id_member):  # Удалить члена организации
+#     subprocess.check_output(
+#         f'bw delete org-member {id_member}  --session {self.auth}',
+#         shell=True)
+
+# _____________________________________________________________________________________________________________________
+
+
+import base64
+import json
+import threading
+from bs4 import BeautifulSoup as bs
+import requests
+
+
+# a = requests.post('http://127.0.0.1/admin', data={"token": 'argon2idv19m65540t3p4iXJdoThAWfLzt'})
+# x = a.headers['set-cookie'].split('=')[1]
+# tkn_session = x.split(';')[0]
+# print(tkn_session)
+
+# _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+# tkn_session_str = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJuYmYiOjE2OTA1NDU0ODYsImV4cCI6MTY5MDU0NjY4NiwiaXNzIjoiaHR0cHM6Ly92dy52bXRsdy5ydXxhZG1pbiIsInN1YiI6ImFkbWluX3BhbmVsIn0.tiHWUkhmvpsaXAE5wpeZWjC744OfM9uN4biUTkH07i7kG4hLKmkqZwq7djMBHqGvBh4AyHujYoWzutOhZ6LtT6vkghdz01lD2hbGtLVyqiC3PKpwwWtTK1MlczyVO4ULU4UQ3Tg7d1G5mzwsNP8LbZ4gi8RibtWFyPg_oF8_dIlS6sLxuJb9952dXjUqTIWz1CpJoh4SYEUIQT1sxM2UkU_MTfkq8U6Y91Im8FWR_olTyzzOAHN-21HrMk1uejXKtG0POkJjipOzAmJd3nanqtjXUbU1sK7vdmFOGc2JJ_yVgAXbDr25JlRo7tP79bf3bYi0sq2hNrrNBnyK09XfKA'
+
+# page = requests.get('http://127.0.0.1/admin/organizations/overview', headers={"Cookie": f"VW_ADMIN={tkn_session_str}"})
+# print(page.status_code)
+# _____________________________________________________________________________________________________________________
+
+# async def get_members(self, request):  # Получить информацию об пользователях
+#     page = requests.get('http://127.0.0.1/admin/users/overview',
+#                         headers={"Cookie": f"VW_ADMIN={tkn_session_str}"})
+#     list_members = []
+#     soup = bs(page.text, 'html.parser')
+#     table = soup.find('table')
+#     result = table.find_all('div', 'overflow-auto vw-org-cell')
+#     for j in result:
+#         list_members.append({"email": j['data-vw-user-email'],
+#                              "user_id": j['data-vw-user-uuid'],
+#                              "org_data": [{button.get('data-vw-org-name'): button.get('data-vw-org-uuid')}
+#                                           for button in j.find_all('button')]})
+#     return list_members
+
+# _____________________________________________________________________________________________________________________
+
+# async def get_organization(self, request):
+#     page = requests.get('http://127.0.0.1/admin/organizations/overview',
+#                         headers={"Cookie": f"VW_ADMIN={tkn_session_str}"})
+#     list_organizations = []
+#     soup = bs(page.text, 'html.parser')
+#     table = soup.find('table')
+#     result = table.find_all('button')
+#     for j in result:
+#         list_organizations.append({"name": j['data-vw-org-name'],
+#                                    "email": j['data-vw-billing-email'],
+#                                    "org_id": j['data-vw-org-uuid']})
+#     return list_organizations
+
+# _____________________________________________________________________________________________________________________
+
+def reload_auth():  # Автоматическая реавторизация каждые 10 минут
+    threading.Timer(600, reload_auth).start()
+    req = requests.post('http://127.0.0.1/admin', data={"token": 'argon2idv19m65540t3p4iXJdoThAWfLzt'})
+    x = req.headers['set-cookie'].split('=')[1]
+    tkn_session = x.split(';')[0]
+    return tkn_session
+
+
+tkn_session_str = reload_auth()
+print(tkn_session_str)
+
+# _____________________________________________________________________________________________________________________
+
+import subprocess
+#
+#
+# def create_collection(data):  # Создание новой коллекции
+#     bw = json.loads(subprocess.check_output
+#                     (f'bw get template org-collection
+#                     --session xlh3ii1VQ4RuKuWnI1IeGxqkMv7F0tJQAkkHtzGq5sRq/VWqzO+NwEMi6ie
+#                     /EPrU373zRw9d596fbZcZum+31Q==',
+#                     shell=True))
+#     bw['organizationId'] = data["org_id"]
+#     bw['name'] = data["name"]
+#     bw['groups'] = []
+#     item = subprocess.check_output(
+#         f"bw create org-collection {base64.b64encode(bytes(json.dumps(bw), encoding='utf-8')).decode('utf-8')}"
+#         f" --organizationid e58bb7e1-ff68-4ef6-a540-bfc744547ada
+#                   --session xlh3ii1VQ4RuKuWnI1IeGxqkMv7F0tJQAkkHtzGq5sRq/VWqzO+NwEMi6ie/EPrU373zRw9d596fbZcZum+31Q==",
+#                   shell=True)
+#     item = json.loads(item)
+#     dct_1 = [{item['id']: (item['name'], item['organizationId'])}]
+#     print(dct_1)
+#
+# _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+#
+# dct = {'org_id': 'e58bb7e1-ff68-4ef6-a540-bfc744547ada',
+#        'name': 'ogogo',
+#        'groups': []}
+#
+# create_collection(dct)
+
+# _____________________________________________________________________________________________________________________
