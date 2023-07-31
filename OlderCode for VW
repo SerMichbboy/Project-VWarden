@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup as bs
+from test import *
 from aiohttp import web
 import logging.handlers
 import subprocess
@@ -9,10 +10,10 @@ import json
 
 url = 'http://127.0.0.1'
 e_mail = ''
-password = ''
+password = 'qweqweqweqwe'
 IP = ''
 
-# -------------------------------logging----------------------------------
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  logging  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 console = logging.StreamHandler()
 console.setLevel(logging.INFO)
@@ -23,26 +24,15 @@ logfile.setLevel(logging.INFO)
 logfile.setFormatter(formatter)
 logging.basicConfig(level=logging.INFO, handlers=[console, logfile])
 
-# -------------------------------logging----------------------------------
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  logging  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
-def reload_auth():  # Автоматическая реавторизация каждые 10 минут
-    threading.Timer(600, reload_auth).start()
-    req = requests.post('http://127.0.0.1/admin', data={"token": ''})
-    x = req.headers['set-cookie'].split('=')[1]
-    tkn_session = x.split(';')[0]
-    return tkn_session
 
+# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  VW autorization  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 tkn_session_str = reload_auth()
-print(tkn_session_str)
-
-# -------------------------------VW autorization----------------------------------
-
-tkn_session_str = '26lXti9Csl6IGUgT4nTULvTiozjdX1wbxyOO1O4Q_3xWVuDsoUq7ji0_haL13rvkXMSx8A'
 
 
-# -------------------------------VW autorization----------------------------------
-
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  VW autorization  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 class Vaultwarden:
     routes = web.RouteTableDef()
@@ -51,19 +41,16 @@ class Vaultwarden:
         self.config_server()
         self.auth = self.get_auth()
 
-    def config_server(self):  # Указывает параметры для использования CLI
-        subprocess.check_output(f'bw config server {url}', shell=True)
+    '''Login/logout'''
 
-    def logout(self):  # Выход из учетной записи
-        subprocess.check_output('bw logout', shell=True)
-
-    def get_auth(self):  # Авторизация
+    def get_auth(self):  # authorization
         def login():
             result = str(subprocess.check_output(
                 f'bw login {e_mail} {password}', shell=True))
             print(result)
             session = result.split('--session ')[-1].replace('\'', '')
             return session
+
         try:
             return login()
         except subprocess.CalledProcessError:
@@ -71,24 +58,22 @@ class Vaultwarden:
             self.logout()
             return login()
 
-    async def get_org_id(self, request):  # Возвращает ID организации
+    def logout(self):  # logout
+        subprocess.check_output('bw logout', shell=True)
+
+    def config_server(self):  # CLI settings
+        subprocess.check_output(f'bw config server {url}', shell=True)
+
+    '''Return info'''
+
+    async def get_org_id(self, request):
         org_id = str(subprocess.check_output(f'bw list organizations --session {self.auth}',
                                              shell=True)).split(':')
         org_id = org_id[2].split(',')[0]
         org_id = org_id.replace('"', '')
         return org_id
 
-    # async def get_members(self, request):  # Информация с членами организации (Получение через терминал)
-    #     org_id = await self.get_org_id(request)
-    #     info = subprocess.check_output(f'bw list org-members'
-    #                                    f' --organizationid {org_id}'
-    #                                    f' --session {self.auth}', shell=True)
-    #     dct_info = {}
-    #     for item in json.loads(info):
-    #         dct_info[item['name']] = (item['email'], item['id'])
-    #     return dct_info
-
-    async def get_members(self, request):  # Получить информацию об пользователях
+    async def get_members(self, request):
         page = requests.get('http://127.0.0.1/admin/users/overview',
                             headers={"Cookie": f"VW_ADMIN={tkn_session_str}"})
         list_members = []
@@ -115,7 +100,20 @@ class Vaultwarden:
                                        "org_id": j['data-vw-org-uuid']})
         return list_organizations
 
-    async def get_collections(self, request):  # Возвращает список c информацией о коллекциях организации
+    async def info_collections(self, request):
+        org_id = await self.get_org_id(request)
+        page = requests.get(f'http://127.0.0.1/api/organizations/{org_id}/users?includeCollections=true',
+                            headers={"Authorization": tkn})
+        lst_collections = []
+        for i in page.json()['Data']:
+            lst_collections.append({'Name': i['Name'],
+                                    'User_Id': i['UserId'],
+                                    'Email': i['Email'],
+                                    'Groups': i['Groups'],
+                                    'Collections': i['Collections']})
+        return lst_collections
+
+    async def get_collections(self, request):
         org_id = await self.get_org_id(request)
         dct = {}
         collections = json.loads(subprocess.check_output(f'bw list org-collections'
@@ -125,25 +123,22 @@ class Vaultwarden:
             dct[item['id']] = (item['name'], org_id)
         return dct
 
-    async def update_data(self, request):  # Передача JSON с информацией (коллекция, ID коллекции, ID организации)
-        users = await self.get_members(request)
-        cols = await self.get_collections(request)
-        orgs = await self.get_organization(request)
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                    f'http://{IP}/service_vaultwarden/update_users', json=users) as response:
-                response_data = await response.json()
-            async with session.post(
-                    f'http://{IP}/service_vaultwarden/update_collections', json=cols) as response:
-                response_data = await response.json()
-            async with session.post(
-                    f'http://{IP}/service_vaultwarden/update_organizations', json=orgs) as response:
-                response_data = await response.json()
-        return True
+    # async def get_members(self, request):  # member collection's info
+    #     org_id = await self.get_org_id(request)
+    #     info = subprocess.check_output(f'bw list org-members'
+    #                                    f' --organizationid {org_id}'
+    #                                    f' --session {self.auth}', shell=True)
+    #     dct_info = {}
+    #     for item in json.loads(info):
+    #         dct_info[item['name']] = (item['email'], item['id'])
+    #     return dct_info
 
-    async def create_collection(self, data):  # Создание новой коллекции
+    '''Create'''
+
+    async def create_collection(self, data):  # create a new collection
         bw = json.loads(subprocess.check_output
-                        (f'bw get template org-collection --session {self.auth}', shell=True))
+                        (f'bw get template org-collection'
+                         f' --session {self.auth}', shell=True))
         bw['organizationId'] = data["org_id"]
         bw['name'] = data["name"]
         bw['groups'] = []
@@ -158,19 +153,56 @@ class Vaultwarden:
                 response_data = await response.json()
         return True
 
-    async def delete_collection(self, data):  # Удалить коллекцию
+    '''Delete'''
+
+    async def delete_user(self, user_id):  # delete user
+        requests.post(f'http://127.0.0.1/admin/users/{user_id}/delete',
+                      headers={"Cookie": f"VW_ADMIN={tkn_session_str}"})
+        return True
+
+    async def delete_organization(self, id_org):  # delete organization
+        requests.post(f'http://127.0.0.1/admin/organizations/{id_org}/delete',
+                      headers={"Cookie": f"VW_ADMIN={tkn_session_str}"})
+        return True
+
+    async def delete_collection(self, data):  # delete collection
         subprocess.check_output(
-            f'bw delete org-collection {data["col_id"]} --organizationid {data["org_id"]}'
+            f'bw delete org-collection {data["col_id"]}'
+            f' --organizationid {data["org_id"]}'
             f' --session {self.auth}',
             shell=True)
         return True
 
-    async def delete_member(self, id_member):  # Удалить члена организации
-        subprocess.check_output(
-            f'bw delete org-member {id_member}  --session {self.auth}',
-            shell=True)
+    # async def delete_member(self, id_member):  # delete member of organization
+    #     subprocess.check_output(
+    #         f'bw delete org-member {id_member}  --session {self.auth}',
+    #         shell=True)
 
-    async def task_maker(self, request):  # Отлов запросов в формате JSON и возврат функции
+    '''Return JSON with info'''
+
+    async def update_data(self, request):
+        infocols = await self.info_collections(request)
+        users = await self.get_members(request)
+        cols = await self.get_collections(request)
+        orgs = await self.get_organization(request)
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                    f'http://{IP}/service_vaultwarden/info_collections', json=infocols) as response:
+                await response.json()
+            async with session.post(
+                    f'http://{IP}/service_vaultwarden/update_users', json=users) as response:
+                await response.json()
+            async with session.post(
+                    f'http://{IP}/service_vaultwarden/update_collections', json=cols) as response:
+                await response.json()
+            async with session.post(
+                    f'http://{IP}/service_vaultwarden/update_organizations', json=orgs) as response:
+                await response.json()
+        return True
+
+    '''Function's manager'''
+
+    async def task_maker(self, request):  # getting JSON / returns a func
         print('Working')
         data = await request.json()
         task = data['args'][0]
@@ -184,8 +216,12 @@ class Vaultwarden:
                   f" \nПараметры: {str(task)}")
 
 
+# _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
 if __name__ == '__main__':
     a = Vaultwarden()
     app = web.Application()
     app.router.add_route('POST', '/make_task', a.task_maker)
     web.run_app(app, port=9090)
+
+# _____________________________________________________________________________________________________________________
