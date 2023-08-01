@@ -1,16 +1,18 @@
-from bs4 import BeautifulSoup as bs
-from test import *
 from aiohttp import web
+from test import *
 import logging.handlers
 import subprocess
+import bs4 as bs
 import requests
+import datetime
 import aiohttp
 import base64
 import json
 
-url = 'http://127.0.0.1'
+
+url = ''
 e_mail = ''
-password = 'qweqweqweqwe'
+password = ''
 IP = ''
 
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  logging  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -27,14 +29,43 @@ logging.basicConfig(level=logging.INFO, handlers=[console, logfile])
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  logging  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
-# ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  VW autorization  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-tkn_session_str = reload_auth()
-
-
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  VW autorization  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-
 class Vaultwarden:
+
+    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  VW autorization  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    admin_token_date = None
+    user_token_date = None
+    admin_token = None
+    user_token = None
+
+    def get_admin_auth(self):
+        if not self.admin_token_date or datetime.datetime.now() - self.admin_token_date > datetime.timedelta(
+                minutes=10):
+            req = requests.post('http://127.0.0.1/admin', data={"token": 'argon2idv19m65540t3p4iXJdoThAWfLzt'})
+            x = req.headers['set-cookie'].split('=')[1]
+            tkn_session = x.split(';')[0]
+            self.admin_token_date = datetime.datetime.now()
+            self.admin_token = tkn_session
+        return self.admin_token
+
+    def get_user_auth(self):
+        if not self.user_token_date or datetime.datetime.now() - self.user_token_date > datetime.timedelta(minutes=10):
+            data = {"scope": "api offline_access",
+                    "client_id": "web",
+                    "deviceType": "9",
+                    "deviceIdentifier": "b87220d3-b7c7-4214-977d-d4d5c1e3d442",
+                    "deviceName": "chrome",
+                    "grant_type": "password",
+                    "username": "sp@calculate.ru",
+                    "password": "VEfCRogBX1bYR2yAW+WxX+JVe6bxcLX1NKnlDKD7tIg="}
+            req_token_session = requests.post('http://127.0.0.1/identity/connect/token', data=data)
+            token_session = req_token_session.json()
+            self.user_token = token_session['access_token']
+            self.user_token_date = datetime.datetime.now()
+            return self.user_token
+
+    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  VW autorization  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
     routes = web.RouteTableDef()
 
     def __init__(self):
@@ -64,64 +95,80 @@ class Vaultwarden:
     def config_server(self):  # CLI settings
         subprocess.check_output(f'bw config server {url}', shell=True)
 
+    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  VW autorization  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
     '''Return info'''
 
-    async def get_org_id(self, request):
-        org_id = str(subprocess.check_output(f'bw list organizations --session {self.auth}',
-                                             shell=True)).split(':')
-        org_id = org_id[2].split(',')[0]
-        org_id = org_id.replace('"', '')
-        return org_id
+    # async def get_org_id(self, request):
+    #     org_id = str(subprocess.check_output(f'bw list organizations --session {self.auth}',
+    #                                          shell=True)).split(':')
+    #     org_id = org_id[2].split(',')[0]
+    #     org_id = org_id.replace('"', '')
+    #     return org_id
 
-    async def get_members(self, request):
+    async def get_members(self):
         page = requests.get('http://127.0.0.1/admin/users/overview',
-                            headers={"Cookie": f"VW_ADMIN={tkn_session_str}"})
-        list_members = []
+                            headers={"Cookie": f"VW_ADMIN={self.admin_token}"})
+        lst_members = []
         soup = bs(page.text, 'html.parser')
         table = soup.find('table')
         result = table.find_all('div', 'overflow-auto vw-org-cell')
         for j in result:
-            list_members.append({"email": j['data-vw-user-email'],
-                                 "user_id": j['data-vw-user-uuid'],
-                                 "org_data": [button.get('data-vw-org-uuid')
-                                              for button in j.find_all('button')]})
-        return list_members
+            lst_members.append({"email": j['data-vw-user-email'],
+                                "user_id": j['data-vw-user-uuid'],
+                                "org_data": [button.get('data-vw-org-uuid')
+                                             for button in j.find_all('button')]})
+        return lst_members
+
+    async def get_collections(self, orgs):
+        dct = {}
+        for org in orgs:
+            org_id = org['org_id']
+            collections = json.loads(subprocess.check_output(f'bw list org-collections'
+                                                             f' --organizationid {org_id}'
+                                                             f' --session {self.auth}', shell=True))
+            for item in collections:
+                dct[item['id']] = (item['name'], org_id)
+        return dct
+
+    async def get_user_collections(self, orgs):
+        dct = {}
+        for org in orgs:
+            org_id = org["org_id"]
+            page = requests.get(f'http://127.0.0.1/api/organizations/{org_id}/users?includeCollections=true',
+                                headers={
+                                    "Authorization": self.user_token})
+            for i in page.json()['Data']:
+                if i['UserId'] in dct:
+                    if i['AccessAll']:
+                        dct[i['UserId']]['collections'].append(f"AccessAll -- {org_id}")
+                    else:
+                        [dct[i['UserId']]['collections'].append(f"{x} -- {org_id}") for x in i['Collections']]
+                else:
+                    if i['AccessAll']:
+                        cols = [f"AccessAll -- {org_id}"]
+                    else:
+                        cols = [f"{x} -- {org_id}" for x in i['Collections']]
+                    dct[i['UserId']] = {'name': i['Name'],
+                                        'user_id': i['UserId'],
+                                        'email': i['Email'],
+                                        'groups': i['Groups'],
+                                        'collections': cols}
+        return dct
 
     async def get_organization(self, request):
         page = requests.get('http://127.0.0.1/admin/organizations/overview',
-                            headers={"Cookie": f"VW_ADMIN={tkn_session_str}"})
-        list_organizations = []
+                            headers={"Cookie": f"VW_ADMIN={self.admin_token}"})
+        dct_org = []
         soup = bs(page.text, 'html.parser')
         table = soup.find('table')
         result = table.find_all('button')
         for j in result:
-            list_organizations.append({"name": j['data-vw-org-name'],
-                                       "email": j['data-vw-billing-email'],
-                                       "org_id": j['data-vw-org-uuid']})
-        return list_organizations
+            dct_org.append({"name": j['data-vw-org-name'],
+                            "email": j['data-vw-billing-email'],
+                            "org_id": j['data-vw-org-uuid']})
+        return dct_org
 
-    async def info_collections(self, request):
-        org_id = await self.get_org_id(request)
-        page = requests.get(f'http://127.0.0.1/api/organizations/{org_id}/users?includeCollections=true',
-                            headers={"Authorization": tkn})
-        lst_collections = []
-        for i in page.json()['Data']:
-            lst_collections.append({'Name': i['Name'],
-                                    'User_Id': i['UserId'],
-                                    'Email': i['Email'],
-                                    'Groups': i['Groups'],
-                                    'Collections': i['Collections']})
-        return lst_collections
-
-    async def get_collections(self, request):
-        org_id = await self.get_org_id(request)
-        dct = {}
-        collections = json.loads(subprocess.check_output(f'bw list org-collections'
-                                                         f' --organizationid {org_id}'
-                                                         f' --session {self.auth}', shell=True))
-        for item in collections:
-            dct[item['id']] = (item['name'], org_id)
-        return dct
 
     # async def get_members(self, request):  # member collection's info
     #     org_id = await self.get_org_id(request)
@@ -150,22 +197,23 @@ class Vaultwarden:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                     f'http://{IP}/service_vaultwarden/update_collections', json=dct_1) as response:
-                response_data = await response.json()
+                await response.json()
         return True
 
     '''Delete'''
 
     async def delete_user(self, user_id):  # delete user
         requests.post(f'http://127.0.0.1/admin/users/{user_id}/delete',
-                      headers={"Cookie": f"VW_ADMIN={tkn_session_str}"})
+                      headers={"Cookie": f"VW_ADMIN={self.admin_token}"})
         return True
 
-    async def delete_organization(self, id_org):  # delete organization
-        requests.post(f'http://127.0.0.1/admin/organizations/{id_org}/delete',
-                      headers={"Cookie": f"VW_ADMIN={tkn_session_str}"})
+    async def delete_organization(self, org_id):  # delete organization
+        requests.post(f'http://127.0.0.1/admin/organizations/{org_id}/delete',
+                      headers={"Cookie": f"VW_ADMIN={self.admin_token}"})
         return True
 
     async def delete_collection(self, data):  # delete collection
+        await self.get_admin_auth()
         subprocess.check_output(
             f'bw delete org-collection {data["col_id"]}'
             f' --organizationid {data["org_id"]}'
@@ -178,31 +226,31 @@ class Vaultwarden:
     #         f'bw delete org-member {id_member}  --session {self.auth}',
     #         shell=True)
 
-    '''Return JSON with info'''
+    '''Return data-JSON'''
 
     async def update_data(self, request):
-        infocols = await self.info_collections(request)
-        users = await self.get_members(request)
-        cols = await self.get_collections(request)
         orgs = await self.get_organization(request)
+        usr_cols = await self.get_user_collections(orgs)
+        users = await self.get_members()
+        cols = await self.get_collections(orgs)
+        usr_data = [i | usr_cols[i['user_id']] if usr_cols.get(i['user_id']) else i for i in users]
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                    f'http://{IP}/service_vaultwarden/info_collections', json=infocols) as response:
-                await response.json()
-            async with session.post(
-                    f'http://{IP}/service_vaultwarden/update_users', json=users) as response:
+                    f'http://{IP}/service_vaultwarden/update_organizations', json=orgs) as response:
                 await response.json()
             async with session.post(
                     f'http://{IP}/service_vaultwarden/update_collections', json=cols) as response:
                 await response.json()
             async with session.post(
-                    f'http://{IP}/service_vaultwarden/update_organizations', json=orgs) as response:
+                    f'http://{IP}/service_vaultwarden/update_users', json=usr_data) as response:
                 await response.json()
         return True
 
     '''Function's manager'''
 
     async def task_maker(self, request):  # getting JSON / returns a func
+        self.get_user_auth()
+        self.get_admin_auth()
         print('Working')
         data = await request.json()
         task = data['args'][0]
