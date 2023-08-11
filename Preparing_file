@@ -393,7 +393,7 @@ import aiohttp
 
 # requests.post('http://127.0.0.1:9090/make_task',
 #               json={'args': [{"action": "create_organization",
-#                               'name': 'someorg',
+#                               'name': 'someorg2',
 #                               'email': 'lalala@calculate.ru'
 #                               }]})
 
@@ -449,13 +449,14 @@ import aiohttp
 #                                   'org_id': 'a8e2e961-3f7c-45ce-a3f2-af114c1df156',
 #                                   'col_id': 'e78d302e-f60a-43b1-9b4b-004d08a064be'}]})
 
-# _____________________________________________________________________________________________________________________
-
 # a = requests.get(f'http://127.0.0.1/api/organizations/a8e2e961-3f7c-45ce-a3f2-af114c1df156/users?includeCollections'
 #                  f'=true', headers={'Authorization': "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9"
 #                                                      ".eyJuYmYiOjE2OTE3Mzk2NTksImV4cCI6MTY5MTc0Njg1OSwiaXNzIjoiaHR0cHM6Ly92dy52bXRsdy5ydXxsb2dpbiIsInN1YiI6ImIxODJiZWNmLTZmYTItNDk0NS05MDIyLWRhOWUxMTU4ZTNhYSIsInByZW1pdW0iOnRydWUsIm5hbWUiOiJzcCIsImVtYWlsIjoic3BAY2FsY3VsYXRlLnJ1IiwiZW1haWxfdmVyaWZpZWQiOnRydWUsIm9yZ293bmVyIjpbImE4ZTJlOTYxLTNmN2MtNDVjZS1hM2YyLWFmMTE0YzFkZjE1NiJdLCJvcmdhZG1pbiI6W10sIm9yZ3VzZXIiOltdLCJvcmdtYW5hZ2VyIjpbXSwic3N0YW1wIjoiZDM2M2RiN2ItM2UyMi00MGY5LWE4NWUtYTc4NjZkYzZjNDU5IiwiZGV2aWNlIjoiNDIyMmFiMDAtMzMzZS00NTIyLTg3NDEtMzQwYTYyNjdkMjc0Iiwic2NvcGUiOlsiYXBpIiwib2ZmbGluZV9hY2Nlc3MiXSwiYW1yIjpbIkFwcGxpY2F0aW9uIl19.vXvAmQYhMdRXfHC0sMUBVNnGSP0tA82CXkpP-vW6yQ6Pb6-OQ4QnGufKwu2ccB3VVX8vp9wJtWDpRwf1GX1Tazg4sgFnwH3B4ovGxBYjsDJpzSIgwNw66dFVCQaBwB1nwk4dRiq9bA1cq1VDxf4hj_1de_IO2eE25-0y2JBFVLJs_Qohmi0QgyroG08piCqEVjxfGByb1p8ccvn-5pxVqD3RK90zsjz7peFx7exxivuCnL3t1fRY2-3ZYltax8qt4q2waZXY6h3SZHjLnSvcKhCj-2LCDJlZU87I0QUw9UCTVWtUZwPtvn8E74r3Z4-E1Ri2cqQWu3M1aZ7XnwHFlQ"})
 # a = a.json()
 # for i in a['Data']:
 #     print(i)
+
+
+# _____________________________________________________________________________________________________________________
 
 
