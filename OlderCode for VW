@@ -186,26 +186,24 @@ class Vaultwarden:
         return True
 
     async def add_to_organization(self, data):
-        orgs = await self.get_organization()
-        if data['org_id'] in [x['org_id'] for x in orgs]:
-            usr_data = {"emails": data['emails'],
-                        "collections": [{"id": data['col_id'],
-                                         "readOnly": data['readOnly'],
-                                         "hidePasswords": data['hidePasswords']}],
-                        "accessAll": False,
-                        "permissions": {"response": None},
-                        "type": 2,
-                        "groups": [],
-                        "accessSecretsManager": False}
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                        f'{url}/api/organizations/{data["org_id"]}/users/invite', json=usr_data,
-                        headers={"Authorization": self.user_token}) as response:
-                    driver = self.selenium(self.selenium_url, self.selenium_email, self.selenium_pass)
-                    driver.add_to_organization(data['org_id'], data['emails'][0])
-            return True
-        else:
-            print('Организации не существует')
+        for org_id in data['orgs_id']:
+            orgs = await self.get_organization()
+            if org_id in [x['org_id'] for x in orgs]:
+                usr_data = {"emails": [data['user']],
+                            "accessAll": False,
+                            "permissions": {"response": None},
+                            "type": 2,
+                            "groups": [],
+                            "accessSecretsManager": False}
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                            f'{url}/api/organizations/{org_id}/users/invite', json=usr_data,
+                            headers={"Authorization": self.user_token}) as response:
+                        driver = self.selenium(self.selenium_url, self.selenium_email, self.selenium_pass)
+                        driver.add_to_organization(org_id, data['user'])
+                return True
+            else:
+                print('Организации не существует')
 
     '''Create'''
 
@@ -247,7 +245,7 @@ class Vaultwarden:
     '''Delete'''
 
     async def delete_user(self, data):  # delete user
-        requests.post(f'{url}/admin/users/{data["usr_id"]}/delete',
+        requests.post(f'{url}/admin/users/{data["user_id"]}/delete',
                       headers={"Cookie": f"VW_ADMIN={self.admin_token}"})
         return True
 
