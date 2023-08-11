@@ -1,19 +1,20 @@
-from aiohttp import web
-from test import *
-import logging.handlers
-import subprocess
-import bs4 as bs
+import os
+import json
+import base64
+import aiohttp
 import requests
 import datetime
-import aiohttp
-import base64
-import json
+import subprocess
+import logging.handlers
+from aiohttp import web
+from confirmation_invite import SeleniumVault
+from bs4 import BeautifulSoup as bs
 
-
-url = ''
-e_mail = ''
-password = ''
-IP = ''
+url = os.environ.get('URL') or '11.11.11.11'
+e_mail = os.environ.get('EMAIL') or 'sp@c.ru'
+password = os.environ.get('PASSWORD') or 'qweqweqweqwe'
+IP = os.environ.get('SERVER_IP') or '11.11.'
+PORT = os.environ.get('LOCAL_PORT') or 9090
 
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  logging  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
@@ -26,22 +27,30 @@ logfile.setLevel(logging.INFO)
 logfile.setFormatter(formatter)
 logging.basicConfig(level=logging.INFO, handlers=[console, logfile])
 
+
 # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  logging  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
 class Vaultwarden:
-
-    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  VW autorization  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
+    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  VW autorization  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     admin_token_date = None
     user_token_date = None
     admin_token = None
     user_token = None
+    auth = None
+    auth_token_date = None
+
+    def __init__(self):
+        self.config_server()
+        self.selenium = SeleniumVault
+        self.selenium_url = 'http://127.0.0.1'
+        self.selenium_email = 'sp@calculate.ru'
+        self.selenium_pass = 'qweqweqweqwe'
 
     def get_admin_auth(self):
         if not self.admin_token_date or datetime.datetime.now() - self.admin_token_date > datetime.timedelta(
                 minutes=10):
-            req = requests.post('http://127.0.0.1/admin', data={"token": 'argon2idv19m65540t3p4iXJdoThAWfLzt'})
+            req = requests.post(f'{url}/admin', data={"token": 'argon2idv19m65540t3p4iXJdoThAWfLzt'})
             x = req.headers['set-cookie'].split('=')[1]
             tkn_session = x.split(';')[0]
             self.admin_token_date = datetime.datetime.now()
@@ -50,44 +59,43 @@ class Vaultwarden:
 
     def get_user_auth(self):
         if not self.user_token_date or datetime.datetime.now() - self.user_token_date > datetime.timedelta(minutes=10):
-            data = {"scope": "api offline_access",
-                    "client_id": "web",
-                    "deviceType": "9",
-                    "deviceIdentifier": "b87220d3-b7c7-4214-977d-d4d5c1e3d442",
-                    "deviceName": "chrome",
-                    "grant_type": "password",
-                    "username": "sp@calculate.ru",
-                    "password": "VEfCRogBX1bYR2yAW+WxX+JVe6bxcLX1NKnlDKD7tIg="}
-            req_token_session = requests.post('http://127.0.0.1/identity/connect/token', data=data)
+            data_user = {"scope": "api offline_access",
+                         "client_id": "web",
+                         "deviceType": "9",
+                         "deviceIdentifier": "b87220d3-b7c7-4214-977d-d4d5c1e3d442",
+                         "deviceName": "chrome",
+                         "grant_type": "password",
+                         "username": "sp@calculate.ru",
+                         "password": "VEfCRogBX1bYR2yAW+WxX+JVe6bxcLX1NKnlDKD7tIg="}
+            req_token_session = requests.post(f'{url}/identity/connect/token', data=data_user)
             token_session = req_token_session.json()
             self.user_token = token_session['access_token']
             self.user_token_date = datetime.datetime.now()
             return self.user_token
 
-    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  VW autorization  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<  VW autorization  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
     routes = web.RouteTableDef()
 
-    def __init__(self):
-        self.config_server()
-        self.auth = self.get_auth()
-
-    '''Login/logout'''
-
-    def get_auth(self):  # authorization
+    def get_auth(self, force=False):  # authorization
         def login():
             result = str(subprocess.check_output(
                 f'bw login {e_mail} {password}', shell=True))
             print(result)
             session = result.split('--session ')[-1].replace('\'', '')
-            return session
+            self.auth = session
+            self.auth_token_date = datetime.datetime.now()
 
         try:
-            return login()
+            if force:
+                login()
+            if not self.auth_token_date or datetime.datetime.now() - self.auth_token_date > datetime.timedelta(
+                    minutes=10):
+                login()
         except subprocess.CalledProcessError:
             self.config_server()
             self.logout()
-            return login()
+            login()
 
     def logout(self):  # logout
         subprocess.check_output('bw logout', shell=True)
@@ -95,19 +103,12 @@ class Vaultwarden:
     def config_server(self):  # CLI settings
         subprocess.check_output(f'bw config server {url}', shell=True)
 
-    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  VW autorization  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  VW autorization  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     '''Return info'''
 
-    # async def get_org_id(self, request):
-    #     org_id = str(subprocess.check_output(f'bw list organizations --session {self.auth}',
-    #                                          shell=True)).split(':')
-    #     org_id = org_id[2].split(',')[0]
-    #     org_id = org_id.replace('"', '')
-    #     return org_id
-
-    async def get_members(self):
-        page = requests.get('http://127.0.0.1/admin/users/overview',
+    async def get_users(self, request):
+        page = requests.get(f'{url}/admin/users/overview',
                             headers={"Cookie": f"VW_ADMIN={self.admin_token}"})
         lst_members = []
         soup = bs(page.text, 'html.parser')
@@ -118,6 +119,7 @@ class Vaultwarden:
                                 "user_id": j['data-vw-user-uuid'],
                                 "org_data": [button.get('data-vw-org-uuid')
                                              for button in j.find_all('button')]})
+
         return lst_members
 
     async def get_collections(self, orgs):
@@ -135,7 +137,7 @@ class Vaultwarden:
         dct = {}
         for org in orgs:
             org_id = org["org_id"]
-            page = requests.get(f'http://127.0.0.1/api/organizations/{org_id}/users?includeCollections=true',
+            page = requests.get(f'{url}/api/organizations/{org_id}/users?includeCollections=true',
                                 headers={
                                     "Authorization": self.user_token})
             for i in page.json()['Data']:
@@ -156,8 +158,8 @@ class Vaultwarden:
                                         'collections': cols}
         return dct
 
-    async def get_organization(self, request):
-        page = requests.get('http://127.0.0.1/admin/organizations/overview',
+    async def get_organization(self):
+        page = requests.get(f'{url}/admin/organizations/overview',
                             headers={"Cookie": f"VW_ADMIN={self.admin_token}"})
         dct_org = []
         soup = bs(page.text, 'html.parser')
@@ -169,69 +171,112 @@ class Vaultwarden:
                             "org_id": j['data-vw-org-uuid']})
         return dct_org
 
+    async def change_user(self, data):
+        for org_id in data['collections'].keys():
+            Id = requests.get(f'http://127.0.0.1/api/organizations/{org_id}/users?includeCollections'
+                              f'=true', headers={'Authorization': self.user_token})
+            lst_id = [i['Id'] for i in Id.json()['Data'] if i['Email'] == data['user']]
+            access_data = {f"collections": data['collections'][org_id],
+                           "groups": [],
+                           "accessAll": False,
+                           "permissions": {"response": None},
+                           "type": 2}
+            a = requests.put(f'http://127.0.0.1/api/organizations/{org_id}/users/{lst_id[0]}',
+                             json=access_data, headers={"Authorization": self.user_token})
+        return True
 
-    # async def get_members(self, request):  # member collection's info
-    #     org_id = await self.get_org_id(request)
-    #     info = subprocess.check_output(f'bw list org-members'
-    #                                    f' --organizationid {org_id}'
-    #                                    f' --session {self.auth}', shell=True)
-    #     dct_info = {}
-    #     for item in json.loads(info):
-    #         dct_info[item['name']] = (item['email'], item['id'])
-    #     return dct_info
+    async def add_to_organization(self, data):
+        orgs = await self.get_organization()
+        if data['org_id'] in [x['org_id'] for x in orgs]:
+            usr_data = {"emails": data['emails'],
+                        "collections": [{"id": data['col_id'],
+                                         "readOnly": data['readOnly'],
+                                         "hidePasswords": data['hidePasswords']}],
+                        "accessAll": False,
+                        "permissions": {"response": None},
+                        "type": 2,
+                        "groups": [],
+                        "accessSecretsManager": False}
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                        f'{url}/api/organizations/{data["org_id"]}/users/invite', json=usr_data,
+                        headers={"Authorization": self.user_token}) as response:
+                    driver = self.selenium(self.selenium_url, self.selenium_email, self.selenium_pass)
+                    driver.add_to_organization(data['org_id'], data['emails'][0])
+            return True
+        else:
+            print('Организации не существует')
 
     '''Create'''
 
-    async def create_collection(self, data):  # create a new collection
+    async def create_user(self, indata):
+        driver = self.selenium(self.selenium_url, self.selenium_email, self.selenium_pass)
+        driver.create_user({"email": indata['email'], "name": indata['name'],
+                            "password": indata['password']})
+        return True
+
+    async def create_collection(self, data_col):  # create new collection
         bw = json.loads(subprocess.check_output
                         (f'bw get template org-collection'
                          f' --session {self.auth}', shell=True))
-        bw['organizationId'] = data["org_id"]
-        bw['name'] = data["name"]
+        bw['organizationId'] = data_col["org_id"]
+        bw['name'] = data_col["name"]
         bw['groups'] = []
         item = subprocess.check_output(
             f"bw create org-collection {base64.b64encode(bytes(json.dumps(bw), encoding='utf-8')).decode('utf-8')}"
-            f" --organizationid {data['org_id']} --session {self.auth}", shell=True)
+            f" --organizationid {data_col['org_id']} --session {self.auth}", shell=True)
         item = json.loads(item)
         dct_1 = {item['id']: (item['name'], item['organizationId'])}
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                    f'http://{IP}/service_vaultwarden/update_collections', json=dct_1) as response:
+                    f'http://{IP}/service_vaultwarden/created_collection', json=dct_1) as response:
+                await response.json()
+        return True
+
+    async def create_organization(self, indata):
+        driver = self.selenium(self.selenium_url, self.selenium_email, self.selenium_pass)
+        driver.create_orgaization(indata['name'], indata['email'])
+        self.get_auth(force=True)
+        orgs = await self.get_organization()
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                    f'http://{IP}/service_vaultwarden/update_organizations', json=orgs) as response:
                 await response.json()
         return True
 
     '''Delete'''
 
-    async def delete_user(self, user_id):  # delete user
-        requests.post(f'http://127.0.0.1/admin/users/{user_id}/delete',
+    async def delete_user(self, data):  # delete user
+        requests.post(f'{url}/admin/users/{data["usr_id"]}/delete',
                       headers={"Cookie": f"VW_ADMIN={self.admin_token}"})
         return True
 
-    async def delete_organization(self, org_id):  # delete organization
-        requests.post(f'http://127.0.0.1/admin/organizations/{org_id}/delete',
-                      headers={"Cookie": f"VW_ADMIN={self.admin_token}"})
+    async def delete_organization(self, data):  # delete organization
+        requests.delete(f'{url}/api/organizations/{data["org_id"]}',
+                        json={"masterPasswordHash": data['password_hash']},
+                        headers={"Authorization": self.user_token})
         return True
 
-    async def delete_collection(self, data):  # delete collection
-        await self.get_admin_auth()
+    async def delete_user_from_organization(self, data):
+        Id = requests.get(f'http://127.0.0.1/api/organizations/{data["org_id"]}/users?includeCollections'
+                          f'=true', headers={'Authorization': self.user_token})
+        lst_id = [i['Id'] for i in Id.json()['Data'] if i['Email'] == data['user']]
+        requests.delete(f'{url}/api/organizations/{data["org_id"]}/users/{lst_id[0]}',
+                        headers={"Authorization": self.user_token})
+        return True
+
+    async def delete_collection(self, data_col):  # delete collection
         subprocess.check_output(
-            f'bw delete org-collection {data["col_id"]}'
-            f' --organizationid {data["org_id"]}'
-            f' --session {self.auth}',
+            f'bw delete org-collection {data_col["col_id"]} --organizationid {data_col["org_id"]} --session {self.auth}',
             shell=True)
         return True
 
-    # async def delete_member(self, id_member):  # delete member of organization
-    #     subprocess.check_output(
-    #         f'bw delete org-member {id_member}  --session {self.auth}',
-    #         shell=True)
-
-    '''Return data-JSON'''
+    ''' Update data'''
 
     async def update_data(self, request):
-        orgs = await self.get_organization(request)
+        orgs = await self.get_organization()
         usr_cols = await self.get_user_collections(orgs)
-        users = await self.get_members()
+        users = await self.get_users(request)
         cols = await self.get_collections(orgs)
         usr_data = [i | usr_cols[i['user_id']] if usr_cols.get(i['user_id']) else i for i in users]
         async with aiohttp.ClientSession() as session:
@@ -251,14 +296,16 @@ class Vaultwarden:
     async def task_maker(self, request):  # getting JSON / returns a func
         self.get_user_auth()
         self.get_admin_auth()
+        self.get_auth()
         print('Working')
-        data = await request.json()
-        task = data['args'][0]
+        data_set = await request.json()
+        task = data_set['args'][0]
         funk = a.__getattribute__(task["action"])
         logging.info(f'processing {task["action"]}')
         res = await funk(task)
         if res:
             logging.info(f"Успешно выполнено {task['action']}")
+            return task['action']
         else:
             print(f"Не удалось выполнить действие {task['action']},"
                   f" \nПараметры: {str(task)}")
@@ -270,6 +317,6 @@ if __name__ == '__main__':
     a = Vaultwarden()
     app = web.Application()
     app.router.add_route('POST', '/make_task', a.task_maker)
-    web.run_app(app, port=9090)
+    web.run_app(app, port=PORT)
 
 # _____________________________________________________________________________________________________________________
