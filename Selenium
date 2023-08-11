@@ -1,0 +1,133 @@
+import time
+from selenium import webdriver
+from selenium.common import TimeoutException
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
+
+
+class SeleniumVault:
+    def __init__(self, url, admin_mail, admin_pass):
+        self.options = Options()
+        self.options.add_argument("disable-infobars")
+        self.options.add_argument("--disable-extensions")
+        self.options.add_argument("--disable-gpu")
+        self.options.add_argument("--disable-dev-shm-usage")
+        self.options.add_argument("--no-sandbox")
+        self.driver = webdriver.Chrome
+        self.base_url = url
+        self.timeout = 15
+        self.admin_mail = admin_mail
+        self.admin_pass = admin_pass
+
+    def wait_for_element(self, element):
+        try:
+            element_present = EC.presence_of_element_located((By.XPATH, element))
+            WebDriverWait(self.driver, self.timeout).until(element_present)
+            return self.driver.find_element(By.XPATH, element)
+        except TimeoutException:
+            "Timed out waiting for page to load"
+
+    def login(self):
+        login = '/html/body/app-root/app-frontend-layout/app-login/form/div/div/div/div[1]/bit-form-field/div/input'
+        continue_button1 = '/html/body/app-root/app-frontend-layout/app-login/form/div/div/div/div[3]/button'
+        continue_button2 = '/html/body/app-root/app-frontend-layout/app-login/form/div/div/div/div/div[3]/button'
+        password_field = '/html/body/app-root/app-frontend-layout/app-login/form/div/div/div/div/div[' \
+                         '1]/bit-form-field/div/input'
+        self.driver = self.driver(options=self.options)
+        self.driver.get(self.base_url)
+        button = self.wait_for_element(login)
+        button.send_keys(self.admin_mail)
+        continue_button1 = self.driver.find_element(By.XPATH, continue_button1)
+        continue_button1.click()
+        button = self.wait_for_element(password_field)
+        button.send_keys(self.admin_pass)
+        continue_button2 = self.driver.find_element(By.XPATH, continue_button2)
+        continue_button2.click()
+
+    def add_to_organization(self, org_id, email):
+        self.login()
+        # вкладка "Требует подтверждения"
+        accept_invite = '/html/body/app-root/app-organization-layout/app-org-people/div/div/div/bit-toggle-group/bit' \
+                        '-toggle[3]/label'
+        self.driver.get(f'{self.base_url}/#/organizations/{org_id}/members')
+        invite = self.wait_for_element(accept_invite)
+        invite.click()
+        i = 1
+
+        while True:
+            email_path = '/html/body/app-root/app-organization-layout/app-org-people/div/bit-table/table/tbody/tr/td[' \
+                         '2]/div/div/div[2]' if i == 1 else \
+                f'/html/body/app-root/app-organization-layout/app-org-people/div/bit-table/table/tbody/tr[{i}]/td[' \
+                f'2]/div/div/div[2]'
+            try:
+                user = self.driver.find_element(By.XPATH, email_path)
+                print(user.text)
+                if user.text == email:
+                    dots = self.driver.find_element(By.XPATH,
+                                                    f'/html/body/app-root/app-organization-layout/app-org-people/div'
+                                                    f'/bit-table/table/tbody/tr[{i}]/td[6]/button/span')
+                    dots.click()
+                    break
+                i += 1
+            except (TimeoutException, AttributeError):
+                break
+
+        accept_button = self.driver.find_element(By.XPATH, '/html/body/div[1]/div[2]/div/div[2]/button[1]')
+        accept_button.click()
+        time.sleep(2)
+        second_accept = self.wait_for_element(
+            '/html/body/app-root/app-organization-layout/app-org-people/div/app-modal/app-user-confirm/div/div['
+            '2]/form/div[3]/button[1]/span')
+        second_accept.click()
+        time.sleep(1)
+
+    def create_user(self, user):
+        create_account = '/html/body/app-root/app-frontend-layout/app-login/form/div/div/div/p/a'
+        email = '/html/body/app-root/app-frontend-layout/app-trial/div/div/app-register-form/form/div/div[' \
+                '1]/bit-form-field/div/input'
+        name = '/html/body/app-root/app-frontend-layout/app-trial/div/div/app-register-form/form/div/div[' \
+               '2]/bit-form-field/div/input'
+        password_1 = '/html/body/app-root/app-frontend-layout/app-trial/div/div/app-register-form/form/div/div[' \
+                     '3]/bit-form-field/div/input'
+        password_2 = '/html/body/app-root/app-frontend-layout/app-trial/div/div/app-register-form/form/div/div[' \
+                     '4]/bit-form-field/div/input'
+        button_create_account = '/html/body/app-root/app-frontend-layout/app-trial/div/div/app-register-form/form/div' \
+                                '/div[8]/button'
+        button_conf = '/html/body/div/div[2]/div/cdk-dialog-container/ng-component/bit-simple-dialog/div/div[' \
+                      '3]/button[1]'
+        self.driver = self.driver(options=self.options)
+        self.driver.get(self.base_url)
+        create_account = self.wait_for_element(create_account)
+        create_account.click()
+        email = self.wait_for_element(email)
+        email.send_keys(user['email'])
+        name = self.wait_for_element(name)
+        name.send_keys(user['name'])
+        password_1 = self.wait_for_element(password_1)
+        password_1.send_keys(user['password'])
+        password_2 = self.wait_for_element(password_2)
+        password_2.send_keys(user['password'])
+        button_create_account = self.wait_for_element(button_create_account)
+        button_create_account.click()
+        time.sleep(2)
+        button_conf = self.wait_for_element(button_conf)
+        button_conf.click()
+
+    def create_orgaization(self, name, email):
+        self.login()
+        name_field = '/html/body/app-root/app-user-layout/app-create-organization/div/div/div/app-organization-plans' \
+                     '/form/app-org-info/form/div[1]/bit-form-field[1]/div/input'
+        email_field = '/html/body/app-root/app-user-layout/app-create-organization/div/div/div/app-organization-plans' \
+                      '/form/app-org-info/form/div[1]/bit-form-field[2]/div/input'
+        confirm_but = '/html/body/app-root/app-user-layout/app-create-organization/div/div/div/app-organization-plans' \
+                      '/form/div[2]/button/span/span[1]'
+        self.driver.get(f'{self.base_url}/#/create-organization')
+        name_input = self.wait_for_element(name_field)
+        name_input.send_keys(name)
+        email_input = self.driver.find_element(By.XPATH, email_field)
+        email_input.send_keys(email)
+        confirm = self.driver.find_element(By.XPATH, confirm_but)
+        confirm.click()
+        time.sleep(1)
